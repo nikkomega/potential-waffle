@@ -1,15 +1,15 @@
 (ns azspcs.core
-  (:require [clojure.set :as set]))
+  (:require [clojure.set :as set]
+            [clojure.string :as str]))
 
 (defn neighbors [[x y]]
   (for [dx [-1 0 1] dy [-1 0 1] :when (not= 0 dx dy)] [(+ x dx) (+ y dy)]))
 
-(def g1 {[0 0] 1 [2 -2] 1})
-
 (defn openings [grid]
-  (set/difference
-    (reduce set/union #{} (map (comp set neighbors) (set (keys grid))))
-    (set (keys grid))))
+  (let [coords (set (keys grid))]
+    (set/difference
+      (reduce set/union #{} (map (comp set neighbors) coords))
+      coords)))
 
 (defn neighbor-sum [grid p]
   (reduce + (map #(get grid % 0) (neighbors p))))
@@ -27,26 +27,37 @@
       (apply max-key count new-grids))))
 
 (defn randstart [n]
-  (let [size (inc n)
+  (let [size 5 #_n
         points (for [x (range (- size) size)
                      y (range (- size) size)]
                  [x y])]
     (into {} (map #(vector % 1) (take n (shuffle points))))))
 
 (defn search [n t]
-  (apply max-key count (take t (repeatedly #(maximize (randstart n) 2)))))
+  (let [solution
+        (time
+          (apply max-key count
+                 (take t (repeatedly #(maximize (randstart n) 2)))))]
+    (println solution)
+    (println (submit solution))
+    (- (inc (count solution)) n)))
 
 (defn format-line [grid y x1 x2]
   (as->
     (for [x (range x1 x2)] (get grid [x y] 0)) line
     (partition-by #(= % 0) line)
     (if (= (first (first line)) 0) line (conj line '()))
-    (partition 1000 2 line)))
+    (partition 2 line)
+    (map #(str (count (first %)) ": " (str/join ", " (second %))) line)
+    (str/join " / " line)
+    (str "(" line ")")))
 
 (defn submit [grid]
-  (let [y1 (min-key (comp second key) grid)
-        y2 (max-key (comp inc second key) grid)
-        x1 (min-key (comp first key) grid)
-        x2 (max-key (comp inc first key) grid)]
-    (for [y (range y1 y2)]
-      (format-line grid y x1 x2))))
+  (let [coords (keys grid)
+        y1 (apply min (map second coords))
+        y2 (inc (apply max (map second coords)))
+        x1 (apply min (map first coords))
+        x2 (inc (apply max (map first coords)))]
+    (str/join ", "
+              (for [y (range y1 y2)]
+                (format-line grid y x1 x2)))))
