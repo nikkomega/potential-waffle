@@ -2,6 +2,8 @@
   (:require [clojure.set :as set]
             [clojure.string :as str]))
 
+(def best (atom 0))
+
 (defn format-line [grid y x1 x2]
   (as->
     (for [x (range x1 x2)] (get grid [x y] 0)) line
@@ -34,41 +36,42 @@
 (defn neighbor-sum [grid p]
   (reduce + (map #(get grid % 0) (neighbors p))))
 
-(defn choices [grid n]
-  (filter
-    #(= n (neighbor-sum grid %))
-    (openings grid)))
+(defn print-grid [grid]
+  (println grid)
+  (println (submit grid))
+  (println (count grid)))
 
-(defn maximize [grid n]
-  (let [best (atom 0)
-        maximize' (fn maximize' [grid n]
-                    (let [choices (choices grid n)
-                          new-grids (map #(maximize' (conj grid [% n]) (inc n)) choices)]
-                      (if (empty? choices)
-                        (if (> n @best)
-                          (do
-                            (println grid)
-                            (println (submit grid))
-                            (println n)
-                            (swap! best (constantly (count grid)))
-                            grid)
-                          grid)
-                        (apply max-key count new-grids))))]
-    (maximize' grid n)))
+(defn maximize [grid halo p n]
+  (let [grid (assoc grid p n)
+        halo (into (dissoc halo p)
+                   (for [p' (neighbors p)
+                         :let [pval (neighbor-sum grid p')]
+                         :when (not (contains? (set (keys grid)) p'))]
+                     [p' pval]))
+        choices (map first (filter (fn [[k v]] (= v (inc n))) halo))
+        new-grids (map #(maximize grid halo % (inc n)) choices)]
+    (if (empty? choices)
+      (do
+        (if (> (count grid) @best)
+          (do
+            (swap! best (constantly (count grid)))
+            (print-grid grid)))
+        grid)
+      (apply max-key count new-grids))))
+
+(def corners {[-1 -1] 1 [1 1] 1})
 
 (defn randstart [n]
-  (let [size 6
-        points (for [x (range (- size) size)
-                     y (range (- size) size)]
+  (let [xsize 10
+        ysize 6
+        points (for [x (range (- xsize) xsize) :when (not (contains? #{-1 0 1} x))
+                     y (range (- ysize) ysize) :when (not (contains? #{-1 0 1} y))]
                  [x y])]
-    (into {} (map #(vector % 1) (take n (shuffle points))))))
+    (into corners (map #(vector % 1) (take (- n 2) (shuffle points))))))
 
-(defn search [n t]
-  (let [solution
-        (time
-          (apply max-key count
-                 (take t (repeatedly #(maximize (randstart n) 2)))))]
-    (println solution)
-    (println (submit solution))
-    (print (- (inc (count solution)) n))
-    nil))
+(defn search [n]
+  (swap! best (constantly 0))
+  (let [grid (randstart n)
+        halo (into {} (map #(vector % (neighbor-sum grid %)) (openings grid)))
+        answer (maximize grid halo [0 0] 2)]
+    (print-grid answer)))
